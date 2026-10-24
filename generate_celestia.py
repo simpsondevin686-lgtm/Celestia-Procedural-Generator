@@ -156,6 +156,109 @@ def pick_texture(primary_pool, unknown_pool):
     if not unknown_pool: return random.choice(primary_pool)
     return random.choice(primary_pool) if random.random() < 0.5 else random.choice(unknown_pool)
 
+
+def generate_moons(planet_mass_earth, planet_radius_km, distance_au, star_mass_solar, rocky_barren, unknown_pool):
+    G = 6.67430e-11
+    M_sun = 1.989e30
+    M_earth = 5.972e24
+    AU = 1.496e8
+    
+    star_mass_kg = star_mass_solar * M_sun
+    planet_mass_kg = planet_mass_earth * M_earth
+    planet_dist_m = distance_au * AU * 1000
+    
+    # Planet Density (kg/km^3) for Roche Limit
+    vol_km3 = (4/3) * math.pi * (planet_radius_km**3)
+    planet_density = planet_mass_kg / vol_km3
+    
+    # Hill Sphere (in km) - The absolute maximum reach of the planet's gravity
+    hill_radius_km = (planet_dist_m / 1000) * (planet_mass_kg / (3 * star_mass_kg))**(1/3)
+    
+    # Max stable moon distance (approx 40% of Hill sphere) - Prevents the star from pulling them away
+    max_moon_dist = hill_radius_km * 0.4
+    
+    # Roche limit - If a moon is closer than this, it gets ripped apart into a ring
+    moon_density = 3e12 # Assuming icy/rocky moon density
+    roche_limit = 2.44 * planet_radius_km * (planet_density / moon_density)**(1/3)
+    
+    min_moon_dist = max(planet_radius_km * 1.5, roche_limit)
+    
+    # If the stable zone is smaller than the Roche limit, no moons can form
+    if min_moon_dist >= max_moon_dist:
+        return ""
+        
+    # Number of moons based on planet mass
+    if planet_mass_earth > 50:
+        num_moons = random.randint(1, 8) # Gas giants get more moons
+    elif planet_mass_earth > 1.0:
+        num_moons = random.randint(0, 3) # Rocky planets
+    else:
+        num_moons = random.randint(0, 1) # Small planets
+        
+    moons_ssc = ""
+    
+    for i in range(num_moons):
+        dist = random.uniform(min_moon_dist, max_moon_dist)
+        
+        if planet_mass_earth > 50:
+            mass_earth = random.uniform(0.0001, 0.05)
+        else:
+            mass_earth = random.uniform(0.00001, 0.01)
+            
+        radius_km = (mass_earth ** 0.3) * 6371
+        
+        # Kepler's Third Law for Moon Orbit
+        period_seconds = 2 * math.pi * math.sqrt(((dist * 1000)**3) / (G * planet_mass_kg))
+        period_days = period_seconds / 86400
+        
+        # Tidal Locking - The moon takes the same time to rotate as it does to orbit
+        rot_hours = period_days * 24
+        
+        # Tidal Squishing (Oblateness)
+        omega = (2 * math.pi) / (rot_hours * 3600)
+        moon_mass_kg = mass_earth * M_earth
+        R_m = radius_km * 1000
+        omega_crit = math.sqrt((G * moon_mass_kg) / (R_m ** 3))
+        ratio = min(omega / omega_crit, 0.9)
+        flattening = 0.73 * (ratio ** 2)
+        if flattening > 0.4: flattening = 0.4
+        
+        semi_axes = f"[ {int(radius_km)} {int(radius_km)} {int(radius_km * (1-flattening))} ]"
+        
+        # Pick a barren texture for the moon
+        pool = rocky_barren if rocky_barren else unknown_pool
+        texture = random.choice(pool) if pool else "asteroid.jpg"
+        
+        # The main loop will replace "TEMP_NAME" with the final planet name
+        moon_ssc = f"""
+        "TEMP_NAME Moon {i+1}" "TEMP_NAME"
+        {{
+            Class "moon"
+            Texture "{texture}"
+            SemiAxes {semi_axes}
+            Mass<kg> {moon_mass_kg:.5e}
+            
+            EllipticalOrbit
+            {{
+                Period {period_days:.3f}
+                SemiMajorAxis {dist:.0f}
+                Eccentricity {random.uniform(0.001, 0.05):.3f}
+                Inclination {random.uniform(-5, 5):.2f}
+            }}
+            
+            UniformRotation
+            {{
+                Period {rot_hours:.3f}
+            }}
+            
+            GeomAlbedo {random.uniform(0.05, 0.3):.3f}
+            BondAlbedo {random.uniform(0.05, 0.3):.3f}
+        }}
+        """
+        moons_ssc += moon_ssc
+        
+    return moons_ssc
+
 def generate_planet_data(star_mass, star_radius, star_temp, gas_pool, rocky_barren, rocky_complex, hot_rocky_pool, unknown_pool, icy_rings, dark_rings, lava):
     chosen_type = random.choices(PLANET_TYPES, weights=[p["chance"] for p in PLANET_TYPES], k=1)[0]
     is_gas = chosen_type["is_gas"]
@@ -298,6 +401,10 @@ def generate_planet_data(star_mass, star_radius, star_temp, gas_pool, rocky_barr
             planet_ssc += f'    \n    Rings\n    {{\n        Inner {int(inner_ring)}\n        Outer {int(outer_ring)}\n        Texture "{ring_texture}"\n    }}\n'
             
     planet_ssc += "}\n"
+    
+        # Inject Moons
+    moons_ssc = generate_moons(mass_earth, radius_km, distance_au, star_mass, rocky_barren, unknown_pool)
+    planet_ssc += moons_ssc
     
     return {"data": planet_ssc, "dist": distance_au}
 
