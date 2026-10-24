@@ -231,7 +231,7 @@ def generate_moons(planet_mass_earth, planet_radius_km, distance_au, star_mass_s
         
         # The main loop will replace "TEMP_NAME" with the final planet name
         moon_ssc = f"""
-        "TEMP_NAME Moon {i+1}" "TEMP_NAME"
+        "Moon {i+1}:TEMP_PLANET" "TEMP_STAR/TEMP_PLANET"
         {{
             Class "moon"
             Texture "{texture}"
@@ -454,7 +454,7 @@ def main():
         
         for p_index, planet in enumerate(system["planets"]):
             roman_numeral = romans[p_index] if p_index < len(romans) else str(p_index + 1)
-            planet_str = planet["data"].replace('"TEMP_STAR"', f'"{star_name}"').replace('"TEMP_NAME"', f'"{star_name} {roman_numeral}"')
+            planet_str = planet["data"].replace('"TEMP_STAR"', f'"{star_name}"').replace('"TEMP_PLANET"', f'"{star_name} {roman_numeral}"').replace('"TEMP_NAME"', f'"{star_name} {roman_numeral}"')
             ssc_content.append(planet_str)
 
     try:
