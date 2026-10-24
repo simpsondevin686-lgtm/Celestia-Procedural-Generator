@@ -322,21 +322,17 @@ def generate_system_from_disk(star_name, star_mass, star_radius, star_temp, gas_
         
         if mass_earth > 30.0:
             is_gas = True
-            ptype = "Gas Giant"
             radius_earth = 11.2 * ((mass_earth / 318) ** 0.05)
             primary_pool = gas_pool
         elif mass_earth > 5.0:
             is_gas = True
-            ptype = "Mini-Neptune"
             radius_earth = 2.0 + (mass_earth / 10.0)
             primary_pool = gas_pool if gas_pool else unknown_pool
         else:
             is_gas = False
             if distance_au < snowline_au:
-                ptype = "Rocky"
                 primary_pool = rocky_complex if mass_earth > 1.0 else rocky_barren
             else:
-                ptype = "Ice World"
                 primary_pool = rocky_barren
             radius_earth = mass_earth ** 0.3
             
@@ -406,21 +402,58 @@ def generate_system_from_disk(star_name, star_mass, star_radius, star_temp, gas_
                         mie_coeff = 0.0001 * mass_factor
 
         has_rings = False
-        if is_gas and ptype != "Ultra-Hot Jupiter" and t_eq_f < 2000:
+        if is_gas and t_eq_f < 2000:
             if t_eq_f < 32: has_rings = random.random() < 0.8
             else: has_rings = random.random() < 0.2
         elif not is_gas: has_rings = random.random() < 0.05
 
         night_texture_str = ""
         if t_eq_f > 900 and lava: 
-            night_texture_str = '\\n    NightTexture "' + random.choice(lava) + '"'
+            night_texture_str = f'\n    NightTexture "{random.choice(lava)}"'
 
-        planet_ssc = '\\n"TEMP_NAME" "TEMP_STAR"\\n{{\\n    Class "planet"\\n    Texture "' + texture + '"' + night_texture_str + '\\n    Color [ ' + f"{random.uniform(0.8, 1.0):.2f} {random.uniform(0.8, 1.0):.2f} {random.uniform(0.8, 1.0):.2f}" + ' ]\\n    SemiAxes ' + semi_axes + '\\n    Mass<kg> ' + f"{mass_kg:.5e}" + '\\n    \\n    EllipticalOrbit\\n    {{\\n        Period ' + f"{period_days:.2f}" + '\\n        SemiMajorAxis ' + f"{distance_au:.5f}" + '\\n        Eccentricity ' + f"{random.uniform(0.01, 0.15):.3f}" + '\\n        Inclination ' + f"{random.uniform(-5, 5):.3f}" + '\\n        AscendingNode ' + f"{random.uniform(0, 360):.2f}" + '\\n        ArgOfPericenter ' + f"{random.uniform(0, 360):.2f}" + '\\n        MeanAnomaly ' + f"{random.uniform(0, 360):.2f}" + '\\n    }}\\n'
+        planet_ssc = f"""
+"TEMP_NAME" "TEMP_STAR"
+{{
+    Class "planet"
+    Texture "{texture}"{night_texture_str}
+    Color [ {random.uniform(0.8, 1.0):.2f} {random.uniform(0.8, 1.0):.2f} {random.uniform(0.8, 1.0):.2f} ]
+    SemiAxes {semi_axes}
+    Mass<kg> {mass_kg:.5e}
+
+    EllipticalOrbit
+    {{
+        Period {period_days:.2f}
+        SemiMajorAxis {distance_au:.5f}
+        Eccentricity {random.uniform(0.01, 0.15):.3f}
+        Inclination {random.uniform(-5, 5):.3f}
+        AscendingNode {random.uniform(0, 360):.2f}
+        ArgOfPericenter {random.uniform(0, 360):.2f}
+        MeanAnomaly {random.uniform(0, 360):.2f}
+    }}
+"""
 
         if has_atmosphere:
-            planet_ssc += '    \\n    Atmosphere\\n    {\\n        Height ' + str(int(atm_height)) + '\\n        Mie ' + f"{mie_coeff:.6f}" + '\\n        MieScaleHeight ' + str(mie_scale) + '\\n        MieHGAnisotropy 0.15\\n        Rayleigh ' + rayleigh + '\\n    }\\n'
+            planet_ssc += f"""    
+    Atmosphere
+    {{
+        Height {int(atm_height)}
+        Mie {mie_coeff:.6f}
+        MieScaleHeight {mie_scale}
+        MieHGAnisotropy 0.15
+        Rayleigh {rayleigh}
+    }}
+"""
 
-        planet_ssc += '    \\n    UniformRotation\\n    {\\n        Period ' + f"{rotation_hours:.2f}" + '\\n        Inclination ' + f"{random.uniform(-20, 20):.2f}" + '\\n    }\\n    \\n    GeomAlbedo ' + f"{albedo:.3f}" + '\\n    BondAlbedo ' + f"{random.uniform(0.05, 0.6):.3f}" + '\\n'
+        planet_ssc += f"""    
+    UniformRotation
+    {{
+        Period {rotation_hours:.2f}
+        Inclination {random.uniform(-20, 20):.2f}
+    }}
+    
+    GeomAlbedo {albedo:.3f}
+    BondAlbedo {random.uniform(0.05, 0.6):.3f}
+"""
 
         if has_rings:
             ring_pool = icy_rings if t_eq_f < 32 and icy_rings else dark_rings
@@ -428,9 +461,16 @@ def generate_system_from_disk(star_name, star_mass, star_radius, star_temp, gas_
                 ring_texture = random.choice(ring_pool)
                 inner_ring = radius_km * random.uniform(1.2, 1.5)
                 outer_ring = inner_ring + random.uniform(10000, 60000)
-                planet_ssc += '    \\n    Rings\\n    {\\n        Inner ' + str(int(inner_ring)) + '\\n        Outer ' + str(int(outer_ring)) + '\\n        Texture "' + ring_texture + '"\\n    }\\n'
+                planet_ssc += f"""    
+    Rings
+    {{
+        Inner {int(inner_ring)}
+        Outer {int(outer_ring)}
+        Texture "{ring_texture}"
+    }}
+"""
                 
-        planet_ssc += "}\\n"
+        planet_ssc += "}\n"
         
         vol_km3 = (4/3) * math.pi * (radius_km**3)
         planet_density = mass_kg / vol_km3
@@ -466,11 +506,44 @@ def generate_system_from_disk(star_name, star_mass, star_radius, star_temp, gas_
                 m_pool = rocky_barren if rocky_barren else unknown_pool
                 m_texture = random.choice(m_pool) if m_pool else "asteroid.jpg"
                 
-                planet_ssc += '\\n"Moon ' + str(m+1) + ':TEMP_NAME" "TEMP_STAR/TEMP_NAME"\\n{\\n    Class "moon"\\n    Texture "' + m_texture + '"\\n    SemiAxes ' + semi_axes_m + '\\n    Mass<kg> ' + f"{moon_mass_kg:.5e}" + '\\n    \\n    EllipticalOrbit\\n    {\\n        Period ' + f"{period_days:.3f}" + '\\n        SemiMajorAxis ' + f"{dist:.0f}" + '\\n        Eccentricity ' + f"{random.uniform(0.001, 0.05):.3f}" + '\\n        Inclination ' + f"{random.uniform(-5, 5):.2f}" + '\\n        AscendingNode ' + f"{random.uniform(0, 360):.2f}" + '\\n        ArgOfPericenter ' + f"{random.uniform(0, 360):.2f}" + '\\n        MeanAnomaly ' + f"{random.uniform(0, 360):.2f}" + '\\n    }\\n    \\n    OrbitFrame\\n    {\\n        EquatorJ2000 { Center "TEMP_STAR/TEMP_NAME" }\\n    }\\n    \\n    UniformRotation\\n    {\\n        Period ' + f"{rot_hours:.3f}" + '\\n    }\\n    \\n    GeomAlbedo ' + f"{random.uniform(0.05, 0.3):.3f}" + '\\n    BondAlbedo ' + f"{random.uniform(0.05, 0.3):.3f}" + '\\n}\\n'
+                planet_ssc += f"""
+"Moon {m+1}:TEMP_NAME" "TEMP_STAR/TEMP_NAME"
+{{
+    Class "moon"
+    Texture "{m_texture}"
+    SemiAxes {semi_axes_m}
+    Mass<kg> {moon_mass_kg:.5e}
+
+    EllipticalOrbit
+    {{
+        Period {period_days:.3f}
+        SemiMajorAxis {dist:.0f}
+        Eccentricity {random.uniform(0.001, 0.05):.3f}
+        Inclination {random.uniform(-5, 5):.2f}
+        AscendingNode {random.uniform(0, 360):.2f}
+        ArgOfPericenter {random.uniform(0, 360):.2f}
+        MeanAnomaly {random.uniform(0, 360):.2f}
+    }}
+
+    OrbitFrame
+    {{
+        EquatorJ2000 {{ Center "TEMP_STAR/TEMP_NAME" }}
+    }}
+
+    UniformRotation
+    {{
+        Period {rot_hours:.3f}
+    }}
+
+    GeomAlbedo {random.uniform(0.05, 0.3):.3f}
+    BondAlbedo {random.uniform(0.05, 0.3):.3f}
+}}
+"""
                 
         final_planets.append({"data": planet_ssc, "dist": distance_au})
         
     return final_planets
+
 
 def main():
     print("Scanning textures...")
