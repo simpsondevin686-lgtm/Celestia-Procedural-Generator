@@ -56,14 +56,14 @@ def generate_dwarf_objects():
         
         name = f"DP-{10001 + i}"
         
-        # 1. Orbital Distribution (Mixture Model)
+        # 1. Orbital Distribution
         pop = random.random()
         if pop < 0.70:
-            sma_au = random.uniform(39.0, 48.0) # Classical KBOs
+            sma_au = random.uniform(39.0, 48.0)
         elif pop < 0.90:
-            sma_au = random.uniform(48.0, 150.0) # Scattered disk
+            sma_au = random.uniform(48.0, 150.0)
         else:
-            sma_au = random.choice([39.4, 47.8]) + random.uniform(-0.5, 0.5) # Resonant
+            sma_au = random.choice([39.4, 47.8]) + random.uniform(-0.5, 0.5)
             
         period_years = math.sqrt((sma_au**3) / 1.0)
         period_days = period_years * 365.25
@@ -74,19 +74,19 @@ def generate_dwarf_objects():
         
         inc = random.gauss(0, 8)
         
-        # 2. Size Distribution (Power Law, q=3.5)
-        u = random.random() # Standard [0, 1) - edge case atom is theoretical
+        # 2. Size Distribution
+        u = random.random() 
         q = 3.5
         r_min, r_max = 50.0, 1500.0
         radius_km = ( (r_max**(1-q) - r_min**(1-q)) * u + r_min**(1-q) ) ** (1/(1-q))
         
-        # 3. Density & Mass (Icy)
+        # 3. Density & Mass
         density_g_cm3 = random.uniform(0.5, 2.0)
         density_kg_km3 = density_g_cm3 * 1e12
         vol_km3 = (4/3) * math.pi * (radius_km**3)
         mass_kg = vol_km3 * density_kg_km3
         
-        # 4. Rotation & Squishing
+        # 4. Rotation
         if radius_km < 100:
             rot_hours = random.uniform(0.5, 12.0)
         else:
@@ -96,7 +96,6 @@ def generate_dwarf_objects():
         R_m = radius_km * 1000
         omega_crit = math.sqrt((G * mass_kg) / (R_m ** 3))
         
-        # Maclaurin small-spin approximation, physically capped by formula max (~0.38)
         ratio = min(omega / omega_crit, 0.95) 
         flattening = 0.42 * (ratio ** 2)
         
@@ -109,8 +108,13 @@ def generate_dwarf_objects():
         pool = rocky if rocky else unknown
         texture = random.choice(pool) if pool else "asteroid.jpg"
         
+        geom = random.uniform(0.05, 0.30)
+        phase_integral = random.uniform(1.2, 1.8)
+        bond = min(0.95, geom * phase_integral)
+
         orbit = f"""    EllipticalOrbit
     {{
+        Epoch 2451545.0
         Period {period_days:.2f}
         SemiMajorAxis {sma_au:.3f}
         Eccentricity {ecc:.3f}
@@ -120,7 +124,7 @@ def generate_dwarf_objects():
         MeanAnomaly {random.uniform(0, 360):.2f}
     }}"""
 
-        # 5. Moons / Barycenter
+        # 5. Moons
         hill_radius_km = (sma_au * AU / 1000) * (mass_kg / (3 * M_sun))**(1/3)
         max_moon_dist = hill_radius_km * 0.4
         roche_limit = 2.44 * radius_km * (density_g_cm3 / 1.0)**(1/3)
@@ -133,7 +137,7 @@ def generate_dwarf_objects():
         
         if min_moon_dist < max_moon_dist and random.random() < p_moon:
             lo_mass_earth = max(1e5 / M_earth, (mass_kg * 0.001) / M_earth)
-            hi_mass_earth = (mass_kg * 0.10) / M_earth  # Cap at 10% (Charon-like)
+            hi_mass_earth = (mass_kg * 0.10) / M_earth
             
             if lo_mass_earth < hi_mass_earth:
                 has_moon = True
@@ -160,28 +164,27 @@ def generate_dwarf_objects():
                 moon_semi_axes = f"[ {int(moon_radius_km)} {int(moon_radius_km)} {moon_z} ]"
                 moon_texture = random.choice(pool) if pool else "asteroid.jpg"
                 
-                # Decoupled moon albedo
                 moon_geom = random.uniform(0.05, 0.35)
                 moon_bond = min(0.95, moon_geom * random.uniform(1.2, 1.8))
 
-        # Parent Albedo
-        geom = random.uniform(0.05, 0.30)
-        phase_integral = random.uniform(1.2, 1.8)
-        bond = min(0.95, geom * phase_integral)
-
         # --- BUILD SSC ---
-        # Defensive gating on has_moon
         if is_barycenter and has_moon:
+            # ReferencePoint at the top
             ssc_content.append(f"""
-Barycenter "{name} System"
+ReferencePoint "{name} System" "Sol"
 {{
 {orbit}
+    Visible true
+    Clickable true
 }}
 """)
+            # Dwarf Planet
+            mesh_tag = 'Mesh "roughsphere.cms"' if obj_class == "asteroid" else ''
             ssc_content.append(f"""
-"{name}" "{name} System"
+"{name}:Procedural {name}" "Sol/{name} System"
 {{
     Class "{obj_class}"
+    {mesh_tag}
     Texture "{texture}"
     SemiAxes {semi_axes}
     Mass<kg> {mass_kg:.5e}
@@ -202,10 +205,14 @@ Barycenter "{name} System"
     BondAlbedo {bond:.3f}
 }}
 """)
+            # Moon
+            moon_class = "minormoon" if moon_radius_km < 200 else "moon"
+            moon_mesh = 'Mesh "roughsphere.cms"' if moon_class == "minormoon" else ''
             ssc_content.append(f"""
-"{name} Moon" "{name} System"
+"{name} Moon:Procedural {name} I" "Sol/{name}"
 {{
-    Class "moon"
+    Class "{moon_class}"
+    {moon_mesh}
     Texture "{moon_texture}"
     SemiAxes {moon_semi_axes}
     Mass<kg> {moon_mass_earth * M_earth:.5e}
@@ -219,7 +226,7 @@ Barycenter "{name} System"
     
     OrbitFrame
     {{
-        EquatorJ2000 {{ Center "{name} System" }}
+        EquatorJ2000 {{ Center "Sol/{name} System" }}
     }}
     
     UniformRotation
@@ -232,10 +239,12 @@ Barycenter "{name} System"
 }}
 """)
         else:
+            mesh_tag = 'Mesh "roughsphere.cms"' if obj_class == "asteroid" else ''
             ssc_content.append(f"""
-"{name}" "Sol"
+"{name}:Procedural {name}" "Sol"
 {{
     Class "{obj_class}"
+    {mesh_tag}
     Texture "{texture}"
     SemiAxes {semi_axes}
     Mass<kg> {mass_kg:.5e}
@@ -252,10 +261,13 @@ Barycenter "{name} System"
 }}
 """)
             if has_moon:
+                moon_class = "minormoon" if moon_radius_km < 200 else "moon"
+                moon_mesh = 'Mesh "roughsphere.cms"' if moon_class == "minormoon" else ''
                 ssc_content.append(f"""
-"{name} Moon" "{name}"
+"{name} Moon:Procedural {name} I" "Sol/{name}"
 {{
-    Class "moon"
+    Class "{moon_class}"
+    {moon_mesh}
     Texture "{moon_texture}"
     SemiAxes {moon_semi_axes}
     Mass<kg> {moon_mass_earth * M_earth:.5e}
@@ -273,7 +285,7 @@ Barycenter "{name} System"
     
     OrbitFrame
     {{
-        EquatorJ2000 {{ Center "{name}" }}
+        EquatorJ2000 {{ Center "Sol/{name}" }}
     }}
     
     UniformRotation
